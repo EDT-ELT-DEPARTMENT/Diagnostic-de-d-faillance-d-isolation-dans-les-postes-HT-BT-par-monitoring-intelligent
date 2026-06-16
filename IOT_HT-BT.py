@@ -147,15 +147,14 @@ if page == "📊 Monitoring Acoustique":
     col_gauche, col_droite = st.columns([4, 6])
     
     with col_gauche:
-        # CONSTRUTION DE L'AIGUILLE GRADUÉE POUR L'OZONE
-        # Le maximum de l'échelle s'adapte si l'ozone dépasse 5 ppm
         max_scale = max(5.0, float(np.ceil(o3_estime)))
         
+        # FIX : Suppression de 'bold': True qui causait le crash de l'app. Remplacement par les balises HTML <b>...</b>
         fig_gauge = go.Figure(go.Indicator(
             mode="gauge+number",
             value=o3_estime,
             domain={'x': [0, 1], 'y': [0, 1]},
-            title={'text': "Taux O₃ Estimé (ppm)", 'font': {'size': 20, 'color': '#00ffcc', 'bold': True}},
+            title={'text': "<b>Taux O₃ Estimé (ppm)</b>", 'font': {'size': 20, 'color': '#00ffcc'}},
             gauge={
                 'axis': {'range': [0, max_scale], 'tickwidth': 2, 'tickcolor': "white"},
                 'bar': {'color': "rgba(255, 255, 255, 0.8)", 'thickness': 0.25},
@@ -163,9 +162,9 @@ if page == "📊 Monitoring Acoustique":
                 'borderwidth': 2,
                 'bordercolor': "#444",
                 'steps': [
-                    {'range': [0, 0.05], 'color': 'rgba(0, 200, 100, 0.3)'},      # Vert sain
-                    {'range': [0.05, 0.25], 'color': 'rgba(250, 150, 0, 0.4)'},    # Orange attention
-                    {'range': [0.25, max_scale], 'color': 'rgba(230, 0, 50, 0.4)'}  # Rouge critique
+                    {'range': [0, 0.05], 'color': 'rgba(0, 200, 100, 0.3)'},      
+                    {'range': [0.05, 0.25], 'color': 'rgba(250, 150, 0, 0.4)'},    
+                    {'range': [0.25, max_scale], 'color': 'rgba(230, 0, 50, 0.4)'}  
                 ],
                 'threshold': {
                     'line': {'color': "#00ffcc", 'width': 4},
@@ -193,7 +192,6 @@ if page == "📊 Monitoring Acoustique":
         st.markdown("<br>", unsafe_allow_html=True)
         st.metric("🚨 Sévérité Système", f"{indice_final:.1f} %")
         
-        # Affichage du bandeau de statut réglementaire
         if style_bandeau == "danger_cc":
             st.error(f"⚡ **CRITIQUE :** {statut_alerte}")
         elif style_bandeau == "danger":
@@ -239,7 +237,7 @@ if page == "📊 Monitoring Acoustique":
     st.plotly_chart(fig_3d, use_container_width=True)
 
 # =================================================================
-# 4. PAGE 2 : PROTOTYPE & DATASHEET (DISPOSITION EXIGÉE)
+# 4. PAGE 2 : PROTOTYPE & DATASHEET (DISPOSITION EXIGÉE CONSERVÉE)
 # =================================================================
 elif page == "🔬 Prototype & Datasheet":
     st.title("🔬 Structure d'Implantation Industrielle & Registres")
@@ -247,6 +245,7 @@ elif page == "🔬 Prototype & Datasheet":
     st.caption(f"Fichier configuré et opéré sous l'autorité de : {FRAMEWORK_EDT}")
     st.divider()
 
+    # Ordre strict : Enseignements, Code, Enseignants, Horaire, Jours, Lieu, Promotion
     data_tab = {
         "Enseignements": [
             "Analyse Spectrale et Transformée de Fourier Ultrasons",
