@@ -57,7 +57,7 @@ def initialiser_firebase():
 # 3. PAGE 1 : MONITORING ACOUSTIQUE & CADRAN GRADUÉ
 # =================================================================
 if page == "📊 Monitoring Acoustique":
-    st.title("🔊 Diagnostic Acoustique & Indicateurs de Performance")
+    st.title("🔊 Diagnostic Acoustique & Indicateurs de Performance d'un poste HT/BT")
     st.markdown(f"### {ST_TITRE_OFFICIEL}")
     st.caption(f"Système de traitement rattaché au pôle : {FRAMEWORK_EDT}")
 
