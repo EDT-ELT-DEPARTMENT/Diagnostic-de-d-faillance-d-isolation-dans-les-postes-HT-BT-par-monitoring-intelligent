@@ -25,7 +25,7 @@ if 'if_offset' not in st.session_state:
     st.session_state.if_offset = 0.0
 
 st.sidebar.title("📂 Menu Principal")
-st.sidebar.markdown(f"**Propulsé par :**\n*{FRAMEWORK_EDT}*")
+st.sidebar.markdown(f"**Projet de fin d'études :**\n*{FRAMEWORK_EDT}*")
 st.sidebar.divider()
 page = st.sidebar.radio("Navigation :", ["📊 Monitoring Acoustique", "🔬 Prototype & Datasheet"])
 
