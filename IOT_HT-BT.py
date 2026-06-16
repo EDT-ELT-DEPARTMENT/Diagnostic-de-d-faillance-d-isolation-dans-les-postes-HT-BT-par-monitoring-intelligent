@@ -54,17 +54,17 @@ def initialiser_firebase():
         return False
 
 # =================================================================
-# 3. PAGE 1 : MONITORING ACOUSTIQUE & DÉPENDANCE DE L'OZONE
+# 3. PAGE 1 : MONITORING ACOUSTIQUE & CADRAN GRADUÉ
 # =================================================================
 if page == "📊 Monitoring Acoustique":
-    st.title("🔊 Diagnostic Acoustique (Ultrasons 40-150 kHz) & Inférence O₃")
+    st.title("🔊 Diagnostic Acoustique & Indicateurs de Performance")
     st.markdown(f"### {ST_TITRE_OFFICIEL}")
     st.caption(f"Système de traitement rattaché au pôle : {FRAMEWORK_EDT}")
 
-    if 'temp_reelle' not in st.session_state: st.session_state.temp_reelle = 25.0
-    if 'hum_reelle' not in st.session_state: st.session_state.hum_reelle = 40.0
-    if 'courant_fuite' not in st.session_state: st.session_state.courant_fuite = 0.0
-    if 'idp_crête' not in st.session_state: st.session_state.idp_crête = 0.0
+    if 'temp_reelle' not in st.session_state: st.session_state.temp_reelle = 18.2
+    if 'hum_reelle' not in st.session_state: st.session_state.hum_reelle = 28.2
+    if 'courant_fuite' not in st.session_state: st.session_state.courant_fuite = 4.90
+    if 'idp_crête' not in st.session_state: st.session_state.idp_crête = 4.88
     if 'freq_ultrasons' not in st.session_state: st.session_state.freq_ultrasons = 40.0
 
     with st.sidebar:
@@ -100,31 +100,24 @@ if page == "📊 Monitoring Acoustique":
             st.session_state.temp_reelle = st.slider("Température ambiante (°C)", 10.0, 70.0, 18.2)
             st.session_state.hum_reelle = st.slider("Humidité ambiante (%)", 5.0, 95.0, 28.2)
 
-    # --- CALCULS PHYSIQUES DES VALEURS ACOUSTIQUES ---
+    # --- CALCULS PHYSIQUES ---
     idp = st.session_state.idp_crête
     f_us = st.session_state.freq_ultrasons
     temp_actuelle = st.session_state.temp_reelle
     hum_actuelle = st.session_state.hum_reelle
     
-    # 1. Calcul de la résonance dynamique du plasma (Glissement de fréquence)
     f_res_dynamique = f_max_res - 60.0 * np.tanh(idp / 3.0)
-    
-    # 2. Calcul de l'amplitude acoustique reçue (Formule de couplage mécanique)
     amplitude_acoustique = k_acoust * idp * (f_us / 40.0) * np.exp(-((f_us - f_res_dynamique) / 35.0)**2)
     if idp == 0:
-        amplitude_acoustique = 0.0  # Sécurité court-circuit franc métallique sans bruit
+        amplitude_acoustique = 0.0
 
-    # 3. Évaluation de la génération d'ozone induite par l'énergie acoustique utile
     f_T = np.exp(-theta_T * (temp_actuelle - 25.0))
     f_H = np.exp(-theta_H * (hum_actuelle - 40.0))
-    
-    # Intégration de la constante de proportionnalité chimique
     o3_estime = 0.25 * amplitude_acoustique * f_T * f_H
 
-    # Indice de sévérité globale
     indice_final = min(100.0, max(0.0, (amplitude_acoustique * 5) + (st.session_state.courant_fuite * 8)))
 
-    # --- 🛠️ CORRECTION DU BUG : LOGIQUE D'ANALYSE DUAL (ACOUSTIQUE + O3) ---
+    # --- LOGIQUE D'ANALYSE DUAL (ACOUSTIQUE + O3) ---
     if st.session_state.courant_fuite > 4.5 and amplitude_acoustique == 0.0:
         statut_alerte = "🚨 COURT-CIRCUIT FRANC GALVANIQUE (Courant élevé, silence acoustique complet : pas d'arcs dans l'air)"
         style_bandeau = "danger_cc"
@@ -138,7 +131,7 @@ if page == "📊 Monitoring Acoustique":
         statut_alerte = "🟢 ISOLEMENT SAIN (Niveau de bruit de fond normal)"
         style_bandeau = "normal"
 
-    # --- RENDER DES COMPOSANTS GRAPHIQUES ---
+    # --- AFFICHAGE DES VALEURS BRUTES ---
     col_mesures = st.columns(5)
     col_mesures[0].metric("🔌 I de fuite (Masse)", f"{st.session_state.courant_fuite:.2f} mA")
     col_mesures[1].metric("⚡ Idp (Impulsion)", f"{idp:.2f} mA")
@@ -146,26 +139,73 @@ if page == "📊 Monitoring Acoustique":
     col_mesures[3].metric("🌡️ Température", f"{temp_actuelle:.1f} °C")
     col_mesures[4].metric("💧 Humidité", f"{hum_actuelle:.1f} %")
 
-    st.markdown("### 🔍 Résultats du Traitement de Signal Acoustique")
-    col_calc = st.columns(4)
-    col_calc[0].metric("🔊 Amplitude Acoustique", f"{amplitude_acoustique:.2f} µV")
-    col_calc[1].metric("🎯 Fréquence Résonance", f"{f_res_dynamique:.1f} kHz")
-    col_calc[2].metric("🧪 Taux O₃ Estimé", f"{o3_estime:.3f} ppm")
-    col_calc[3].metric("🚨 Sévérité Système", f"{indice_final:.1f} %")
+    st.divider()
 
-    # Affichage du bandeau de sécurité mis à jour
-    if style_bandeau == "danger_cc":
-        st.error(f"⚡ **CRITIQUE :** {statut_alerte}")
-    elif style_bandeau == "danger":
-        st.error(f"🚨 **DANGER DE DEGRADATION :** {statut_alerte}")
-    elif style_bandeau == "warning":
-        st.warning(f"⚠️ **AVERTISSEMENT :** {statut_alerte}")
-    else:
-        st.success(f"✅ **STATUT :** {statut_alerte}")
+    # --- DISPOSITION GRAPHIQUE COMPACTE : CADRAN + METRICS RÉSULTATS ---
+    st.markdown("### 🎛️ Tableau de Bord Inférence & Diagnostic")
+    
+    col_gauche, col_droite = st.columns([4, 6])
+    
+    with col_gauche:
+        # CONSTRUTION DE L'AIGUILLE GRADUÉE POUR L'OZONE
+        # Le maximum de l'échelle s'adapte si l'ozone dépasse 5 ppm
+        max_scale = max(5.0, float(np.ceil(o3_estime)))
+        
+        fig_gauge = go.Figure(go.Indicator(
+            mode="gauge+number",
+            value=o3_estime,
+            domain={'x': [0, 1], 'y': [0, 1]},
+            title={'text': "Taux O₃ Estimé (ppm)", 'font': {'size': 20, 'color': '#00ffcc', 'bold': True}},
+            gauge={
+                'axis': {'range': [0, max_scale], 'tickwidth': 2, 'tickcolor': "white"},
+                'bar': {'color': "rgba(255, 255, 255, 0.8)", 'thickness': 0.25},
+                'bgcolor': "rgba(0,0,0,0)",
+                'borderwidth': 2,
+                'bordercolor': "#444",
+                'steps': [
+                    {'range': [0, 0.05], 'color': 'rgba(0, 200, 100, 0.3)'},      # Vert sain
+                    {'range': [0.05, 0.25], 'color': 'rgba(250, 150, 0, 0.4)'},    # Orange attention
+                    {'range': [0.25, max_scale], 'color': 'rgba(230, 0, 50, 0.4)'}  # Rouge critique
+                ],
+                'threshold': {
+                    'line': {'color': "#00ffcc", 'width': 4},
+                    'thickness': 0.8,
+                    'value': o3_estime
+                }
+            }
+        ))
+        
+        fig_gauge.update_layout(
+            template="plotly_dark",
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            height=320,
+            margin=dict(l=30, r=30, t=60, b=10)
+        )
+        st.plotly_chart(fig_gauge, use_container_width=True)
+
+    with col_droite:
+        st.markdown("<br>", unsafe_allow_html=True)
+        col_sub_calc = st.columns(2)
+        col_sub_calc[0].metric("🔊 Amplitude Acoustique", f"{amplitude_acoustique:.2f} µV")
+        col_sub_calc[1].metric("🎯 Fréquence Résonance", f"{f_res_dynamique:.1f} kHz")
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.metric("🚨 Sévérité Système", f"{indice_final:.1f} %")
+        
+        # Affichage du bandeau de statut réglementaire
+        if style_bandeau == "danger_cc":
+            st.error(f"⚡ **CRITIQUE :** {statut_alerte}")
+        elif style_bandeau == "danger":
+            st.error(f"🚨 **DANGER DE DÉGRADATION :** {statut_alerte}")
+        elif style_bandeau == "warning":
+            st.warning(f"⚠️ **AVERTISSEMENT :** {statut_alerte}")
+        else:
+            st.success(f"✅ **STATUT :** {statut_alerte}")
 
     st.divider()
 
-    # --- GRAPHIC 1: SPECTRE EN FRÉQUENCE DE L'ONDE ACOUSTIQUE ---
+    # --- SPECTRE FREQUENTIEL ---
     f_axis = np.linspace(20, 180, 200)
     spectre_vals = k_acoust * idp * (f_axis / 40.0) * np.exp(-((f_axis - f_res_dynamique) / 35.0)**2) if idp > 0 else np.zeros_like(f_axis)
 
@@ -176,12 +216,12 @@ if page == "📊 Monitoring Acoustique":
     fig_spectre.update_layout(
         template="plotly_dark",
         title="Spectre fréquentiel de la Décharge Partielle (Amplitude mécanique = f(Fréquence))",
-        xaxis_title="Fréquence Ultravons (kHz)",
+        xaxis_title="Fréquence Ultrasons (kHz)",
         yaxis_title="Amplitude du signal capteur (µV)"
     )
     st.plotly_chart(fig_spectre, use_container_width=True)
 
-    # --- GRAPHIC 2: SURFACE 3D DEPENDANCE DE L'OZONE ---
+    # --- SURFACE 3D ---
     st.subheader("🌐 Cartographie Tridimensionnelle de Stabilité Chimique de l'Ozone")
     t_space = np.linspace(10, 70, 30)
     h_space = np.linspace(5, 95, 30)
@@ -199,7 +239,7 @@ if page == "📊 Monitoring Acoustique":
     st.plotly_chart(fig_3d, use_container_width=True)
 
 # =================================================================
-# 4. PAGE 2 : PROTOTYPE & DATASHEET
+# 4. PAGE 2 : PROTOTYPE & DATASHEET (DISPOSITION EXIGÉE)
 # =================================================================
 elif page == "🔬 Prototype & Datasheet":
     st.title("🔬 Structure d'Implantation Industrielle & Registres")
