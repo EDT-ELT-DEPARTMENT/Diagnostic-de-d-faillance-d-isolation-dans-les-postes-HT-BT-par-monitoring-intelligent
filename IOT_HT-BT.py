@@ -11,7 +11,7 @@ from streamlit_autorefresh import st_autorefresh
 # 1. CONFIGURATION DE LA PAGE & TITRES OFFICIELS
 # =================================================================
 ST_TITRE_OFFICIEL = "Diagnostic des défaillances d’Isolation par Monitoring Intelligent Acoustique et Taux d’Ozone via Automate"
-FRAMEWORK_EDT = "Plateforme de gestion des EDTs-S2-2026-Département d'Électrotechnique-Faculté de génie électrique-UDL-SBA"
+Intitulé du mémoire = "Diagnostic de défaillance d'isolation dans les postes HT/BT par monitoring intelligent du taux d'ozone via automate programmable."
 
 st.set_page_config(
     page_title=ST_TITRE_OFFICIEL,
