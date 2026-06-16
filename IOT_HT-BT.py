@@ -19,7 +19,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Rafraîchissement automatique de l'IHM toutes les 2 secondes
 st_autorefresh(interval=2000, key="acoustrefresh")
 
 if 'if_offset' not in st.session_state:
@@ -54,15 +53,15 @@ def initialiser_firebase():
         return False
 
 # =================================================================
-# 3. PAGE 1 : MONITORING ACOUSTIQUE & COMPENSATEUR THERMIQUE D'OZONE
+# 3. PAGE 1 : MONITORING ACOUSTIQUE & ANALYSE À T=0
 # =================================================================
 if page == "📊 Monitoring Acoustique":
-    st.title("🔊 Diagnostic Acoustique & Compensation Thermique")
+    st.title("🔊 Diagnostic Instantané à t=0 & Cinétique de Décharge")
     st.markdown(f"### {ST_TITRE_OFFICIEL}")
     st.caption(f"Système de traitement rattaché au pôle : {FRAMEWORK_EDT}")
 
-    if 'temp_reelle' not in st.session_state: st.session_state.temp_reelle = 45.0  # Simulation d'un poste chaud
-    if 'hum_reelle' not in st.session_state: st.session_state.hum_reelle = 28.2
+    if 'temp_reelle' not in st.session_state: st.session_state.temp_reelle = 25.0 
+    if 'hum_reelle' not in st.session_state: st.session_state.hum_reelle = 40.0
     if 'courant_fuite' not in st.session_state: st.session_state.courant_fuite = 4.90
     if 'idp_crête' not in st.session_state: st.session_state.idp_crête = 4.88
     if 'freq_ultrasons' not in st.session_state: st.session_state.freq_ultrasons = 40.0
@@ -72,11 +71,16 @@ if page == "📊 Monitoring Acoustique":
         mode_experimental = st.toggle("🚀 Mode Capteur Physique en Ligne", value=False)
         st.divider()
         
-        st.subheader("⚙️ Constantes Plasma & Piézo")
+        st.subheader("⚙️ Coeffs de Production Initiale (t=0)")
         k_acoust = st.number_input("Gain Capteur ($K_{acoustique}$)", value=2.50, format="%.2f")
         f_max_res = st.number_input("Fréquence Max à vide ($f_{max}$ kHz)", value=140.0, format="%.1f")
-        theta_T = st.number_input("Atténuation Thermique O3 ($\\theta_T$)", value=0.045, format="%.3f", help="Facteur de dégradation thermique de l'ozone")
-        theta_H = st.number_input("Atténuation Humidité O3 ($\\theta_H$)", value=0.015, format="%.3f")
+        
+        # Coefficients d'impact sur la GÉNÉRATION PURE à t=0
+        alpha_gen = st.number_input("Inhibition Thermique Génération ($\\alpha_{gen}$)", value=0.012, format="%.3f")
+        beta_gen = st.number_input("Quenching Humidité Génération ($\\beta_{gen}$)", value=0.018, format="%.3f")
+        
+        # Coefficient de DECOMPOSITION (pour info comparative t>0)
+        theta_decompo = st.number_input("Taux de Décomposition Thermique (t>0)", value=0.035, format="%.3f")
         st.divider()
         
         if mode_experimental:
@@ -97,165 +101,131 @@ if page == "📊 Monitoring Acoustique":
             st.session_state.courant_fuite = st.slider("Courant Globale de Fuite (mA)", 0.0, 15.0, 4.90)
             st.session_state.idp_crête = st.slider("Amplitude Courant de Décharge Idp (mA)", 0.0, 10.0, 4.88)
             st.session_state.freq_ultrasons = st.slider("Fréquence centrale captée (kHz)", 20.0, 180.0, 40.0)
-            st.session_state.temp_reelle = st.slider("Température ambiante du Poste (°C)", 10.0, 70.0, 45.0, help="Faites monter la température pour observer la compensation")
+            st.session_state.temp_reelle = st.slider("Température ambiante du Poste (°C)", 10.0, 70.0, 18.2)
             st.session_state.hum_reelle = st.slider("Humidité ambiante (%)", 5.0, 95.0, 28.2)
 
-    # --- CALCULS PHYSIQUES APPLIQUÉS ---
+    # --- CALCULS PHYSIQUES QUANTITATIFS ---
     idp = st.session_state.idp_crête
     f_us = st.session_state.freq_ultrasons
-    temp_actuelle = st.session_state.temp_reelle
-    hum_actuelle = st.session_state.hum_reelle
+    T = st.session_state.temp_reelle
+    H = st.session_state.hum_reelle
     
-    # 1. Propagation mécanique de l'onde de choc du plasma
+    # Énergie acoustique équivalente
     f_res_dynamique = f_max_res - 60.0 * np.tanh(idp / 3.0)
     amplitude_acoustique = k_acoust * idp * (f_us / 40.0) * np.exp(-((f_us - f_res_dynamique) / 35.0)**2)
     if idp == 0:
         amplitude_acoustique = 0.0
 
-    # 2. Modélisation de la dégradation de l'ozone dans l'air ambiant chaud
-    f_T = np.exp(-theta_T * (temp_actuelle - 25.0))
-    f_H = np.exp(-theta_H * (hum_actuelle - 40.0))
+    # 🌟 FORMULATION DEMANDÉE : Concentration instantanée générée à t=0 (Sans loi de survie)
+    o3_généré_t0 = 0.5 * amplitude_acoustique * np.exp(-alpha_gen * T) * np.exp(-beta_gen * H)
     
-    # Concentration résiduelle que le capteur mesurerait physiquement (diminue si temp augmente)
-    o3_mesure_brut = 0.25 * amplitude_acoustique * f_T * f_H
-    
-    # 🌟 INNOVATION UTILIATEUR : Reconstruction analytique de la génération réelle (Normalisée à 25°C)
-    o3_normalise_intensite = o3_mesure_brut / f_T
+    # Calcul comparatif : Ce qui survit après décomposition thermique (t > 0)
+    o3_résiduel = o3_généré_t0 * np.exp(-theta_decompo * max(0.0, T - 20.0))
 
-    # Indice de sévérité globale indexé sur la valeur normalisée pour éviter les faux négatifs
     indice_final = min(100.0, max(0.0, (amplitude_acoustique * 5) + (st.session_state.courant_fuite * 8)))
 
-    # --- LOGIQUE D'ANALYSE DUAL CORRIGÉE VIA INTENSITÉ NORMALISÉE ---
+    # --- SÉCURITÉ BASÉE SUR L'INTENSITÉ INITIALE GÉNÉRÉE À T=0 ---
     if st.session_state.courant_fuite > 4.5 and amplitude_acoustique == 0.0:
-        statut_alerte = "🚨 COURT-CIRCUIT FRANC GALVANIQUE (Silence acoustique : liaison purement métallique sans arc gazeux)"
+        statut_alerte = "🚨 COURT-CIRCUIT FRANC GALVANIQUE (Liaison solide, aucun plasma gazeux généré)"
         style_bandeau = "danger_cc"
-    elif o3_normalise_intensite >= 0.25 or amplitude_acoustique > 15.0:
-        statut_alerte = "🔴 DANGER IMMINENT D'AMORÇAGE (L'Intensité d'O₃ normalisée confirme une ionisation destructive masquée par la chaleur)"
+    elif o3_généré_t0 >= 0.20 or amplitude_acoustique > 15.0:
+        statut_alerte = "🔴 IONISATION CRITIQUE À L'ORIGINE (La décharge produit une quantité dangereuse d'O₃ à l'instant t=0)"
         style_bandeau = "danger"
-    elif (0.05 <= o3_normalise_intensite < 0.25) or (5.0 <= amplitude_acoustique <= 15.0):
-        statut_alerte = "⚠️ VIGILANCE EFFET CORONA (Activité électrique modérée détectée sous compensation thermique)"
+    elif (0.04 <= o3_généré_t0 < 0.20) or (5.0 <= amplitude_acoustique <= 15.0):
+        statut_alerte = "⚠️ VIGILANCE MICRO-ARCS (Génération d'O₃ détectée à la source)"
         style_bandeau = "warning"
     else:
-        statut_alerte = "🟢 ISOLEMENT DIÉLECTRIQUE SAIN"
+        statut_alerte = "🟢 ISLEMENT NORMAL (Énergie d'ionisation négligeable)"
         style_bandeau = "normal"
 
-    # --- AFFICHAGE DES PARAMÈTRES ET ENTRÉES ---
+    # --- PANNEAU DES MESURES ---
     col_mesures = st.columns(5)
     col_mesures[0].metric("🔌 I de fuite (Masse)", f"{st.session_state.courant_fuite:.2f} mA")
     col_mesures[1].metric("⚡ Idp (Impulsion)", f"{idp:.2f} mA")
     col_mesures[2].metric("🔊 Freq Écoute", f"{f_us:.1f} kHz")
-    col_mesures[3].metric("🌡️ Température", f"{temp_actuelle:.1f} °C")
-    col_mesures[4].metric("💧 Humidité", f"{hum_actuelle:.1f} %")
+    col_mesures[3].metric("🌡️ Température", f"{T:.1f} °C")
+    col_mesures[4].metric("💧 Humidité", f"{H:.1f} %")
 
     st.divider()
 
-    # --- TRIPLE CADRAN SYSTÈME (COMPARAISON BRUT VS NORMALISÉ) ---
-    st.markdown("### 🎛️ Analyse comparative des Émissions d'Ozone (Algorithme de Compensation Thermique)")
+    # --- DEUX CADRANS : PRODUCTION À T=0 VS RÉSIDUEL EN CHAMBRE ---
+    st.markdown("### 🎛️ Analyse Synoptique de la Décharge (Physique des Arcs)")
     
-    col_gauge_brut, col_gauge_norm, col_donnees = st.columns([3.5, 3.5, 3])
+    col_t0, col_tx, col_metrics = st.columns([3.5, 3.5, 3])
     
-    with col_gauge_brut:
-        # Cadran 1 : Valeur brute (dégradée par la chaleur)
-        max_scale_brut = max(5.0, float(np.ceil(o3_mesure_brut)))
-        fig_gauge_brut = go.Figure(go.Indicator(
+    with col_t0:
+        # Cadran Aiguille de Génération Pure à t=0
+        max_scale_t0 = max(5.0, float(np.ceil(o3_généré_t0)))
+        fig_t0 = go.Figure(go.Indicator(
             mode="gauge+number",
-            value=o3_mesure_brut,
+            value=o3_généré_t0,
             domain={'x': [0, 1], 'y': [0, 1]},
-            title={'text': "<b>O₃ Physique Mesuré (Capteur)</b><br><span style='font-size:0.8em;color:gray'>Atténué par la chaleur</span>", 'font': {'size': 15, 'color': '#ff9933'}},
+            title={'text': "<b>O₃ Instantané Généré (t=0)</b><br><span style='font-size:0.8em;color:#00ffcc'>Concentration brute à la source</span>", 'font': {'size': 14, 'color': '#00ffcc'}},
             gauge={
-                'axis': {'range': [0, max_scale_brut], 'tickcolor': "white"},
-                'bar': {'color': "#ff9933"},
-                'bgcolor': "rgba(0,0,0,0)",
-                'steps': [
-                    {'range': [0, 0.05], 'color': 'rgba(0, 200, 100, 0.1)'},      
-                    {'range': [0.05, 0.25], 'color': 'rgba(250, 150, 0, 0.1)'},    
-                    {'range': [0.25, max_scale_brut], 'color': 'rgba(230, 0, 50, 0.1)'}  
-                ]
-            }
-        ))
-        fig_gauge_brut.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', height=280, margin=dict(l=20, r=20, t=60, b=10))
-        st.plotly_chart(fig_gauge_brut, use_container_width=True)
-
-    with col_gauge_norm:
-        # Cadran 2 : Valeur Intelligente Normalisée (Intensité réelle de production générée par l'arc)
-        max_scale_norm = max(5.0, float(np.ceil(o3_normalise_intensite)))
-        fig_gauge_norm = go.Figure(go.Indicator(
-            mode="gauge+number",
-            value=o3_normalise_intensite,
-            domain={'x': [0, 1], 'y': [0, 1]},
-            title={'text': "<b>Intensité Réelle O₃ (Normalisée 25°C)</b><br><span style='font-size:0.8em;color:#00ffcc'>Vrai niveau de défaillance</span>", 'font': {'size': 15, 'color': '#00ffcc'}},
-            gauge={
-                'axis': {'range': [0, max_scale_norm], 'tickcolor': "white"},
+                'axis': {'range': [0, max_scale_t0], 'tickcolor': "white"},
                 'bar': {'color': "#00ffcc"},
                 'bgcolor': "rgba(0,0,0,0)",
                 'steps': [
-                    {'range': [0, 0.05], 'color': 'rgba(0, 200, 100, 0.2)'},      
-                    {'range': [0.05, 0.25], 'color': 'rgba(250, 150, 0, 0.3)'},    
-                    {'range': [0.25, max_scale_norm], 'color': 'rgba(230, 0, 50, 0.4)'}  
-                ],
-                'threshold': {
-                    'line': {'color': "red", 'width': 3},
-                    'thickness': 0.75,
-                    'value': 0.25
-                }
+                    {'range': [0, 0.04], 'color': 'rgba(0, 200, 100, 0.2)'},      
+                    {'range': [0.04, 0.20], 'color': 'rgba(250, 150, 0, 0.3)'},    
+                    {'range': [0.20, max_scale_t0], 'color': 'rgba(230, 0, 50, 0.4)'}  
+                ]
             }
         ))
-        fig_gauge_norm.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', height=280, margin=dict(l=20, r=20, t=60, b=10))
-        st.plotly_chart(fig_gauge_norm, use_container_width=True)
+        fig_t0.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', height=270, margin=dict(l=20, r=20, t=60, b=10))
+        st.plotly_chart(fig_t0, use_container_width=True)
 
-    with col_donnees:
+    with col_tx:
+        # Cadran Aiguille du Taux d'O3 persistant (après décomposition)
+        max_scale_tx = max(5.0, float(np.ceil(o3_résiduel)))
+        fig_tx = go.Figure(go.Indicator(
+            mode="gauge+number",
+            value=o3_résiduel,
+            domain={'x': [0, 1], 'y': [0, 1]},
+            title={'text': "<b>O₃ Résiduel Stable (t>0)</b><br><span style='font-size:0.8em;color:#ffaa00'>Valeur résiduelle dans la cellule</span>", 'font': {'size': 14, 'color': '#ffaa00'}},
+            gauge={
+                'axis': {'range': [0, max_scale_tx], 'tickcolor': "white"},
+                'bar': {'color': "#ffaa00"},
+                'bgcolor': "rgba(0,0,0,0)",
+                'steps': [
+                    {'range': [0, 0.04], 'color': 'rgba(0, 200, 100, 0.1)'},      
+                    {'range': [0.04, 0.20], 'color': 'rgba(250, 150, 0, 0.1)'},    
+                    {'range': [0.20, max_scale_tx], 'color': 'rgba(230, 0, 50, 0.1)'}  
+                ]
+            }
+        ))
+        fig_tx.update_layout(template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', height=270, margin=dict(l=20, r=20, t=60, b=10))
+        st.plotly_chart(fig_tx, use_container_width=True)
+
+    with col_metrics:
         st.markdown("<br>", unsafe_allow_html=True)
         st.metric("🔊 Amplitude Acoustique", f"{amplitude_acoustique:.2f} µV")
-        st.metric("🎯 Fréquence Résonance", f"{f_res_dynamique:.1f} kHz")
-        st.metric("🚨 Sévérité Matérielle", f"{indice_final:.1f} %")
+        st.metric("🎯 Résonance Plasma", f"{f_res_dynamique:.1f} kHz")
+        st.metric("🚨 Taux de Sévérité", f"{indice_final:.1f} %")
         
-        # Affichage du verdict sécuritaire
         if style_bandeau == "danger_cc":
-            st.error(f"⚡ **CRITIQUE :** {statut_alerte}")
+            st.error(f"⚡ {statut_alerte}")
         elif style_bandeau == "danger":
-            st.error(f"🚨 **ALERTE CORRIGÉE :** {statut_alerte}")
+            st.error(f"🚨 {statut_alerte}")
         elif style_bandeau == "warning":
-            st.warning(f"⚠️ **AVERTISSEMENT :** {statut_alerte}")
+            st.warning(f"⚠️ {statut_alerte}")
         else:
-            st.success(f"✅ **STATUT :** {statut_alerte}")
+            st.success(f"✅ {statut_alerte}")
 
     st.divider()
 
-    # --- VISUALISATION DES SPECTRES ---
+    # --- SPECTRE ACOUSTIQUE ---
     f_axis = np.linspace(20, 180, 200)
     spectre_vals = k_acoust * idp * (f_axis / 40.0) * np.exp(-((f_axis - f_res_dynamique) / 35.0)**2) if idp > 0 else np.zeros_like(f_axis)
 
     fig_spectre = go.Figure()
     fig_spectre.add_trace(go.Scatter(x=f_axis, y=spectre_vals, name="Spectre d'Émission Acoustique", line=dict(color='orange', width=3)))
     fig_spectre.add_trace(go.Scatter(x=[f_us], y=[amplitude_acoustique], name="Point d'Écoute Actuel", mode='markers', marker=dict(color='red', size=12, symbol='cross')))
-    
-    fig_spectre.update_layout(
-        template="plotly_dark",
-        title="Spectre fréquentiel de la Décharge Partielle (Amplitude mécanique = f(Fréquence))",
-        xaxis_title="Fréquence Ultrasons (kHz)",
-        yaxis_title="Amplitude du signal capteur (µV)"
-    )
+    fig_spectre.update_layout(template="plotly_dark", title="Spectre fréquentiel de la Décharge Partielle", xaxis_title="Fréquence (kHz)", yaxis_title="Amplitude (µV)")
     st.plotly_chart(fig_spectre, use_container_width=True)
 
-    # --- CARTOGRAPHIE 3D ---
-    st.subheader("🌐 Cartographie Tridimensionnelle de Stabilité Chimique de l'Ozone")
-    t_space = np.linspace(10, 70, 30)
-    h_space = np.linspace(5, 95, 30)
-    T_mesh, H_mesh = np.meshgrid(t_space, h_space)
-    
-    Z_O3 = 0.25 * amplitude_acoustique * np.exp(-theta_T * (T_mesh - 25.0)) * np.exp(-theta_H * (H_mesh - 40.0))
-
-    fig_3d = go.Figure(data=[go.Surface(x=t_space, y=h_space, z=Z_O3, colorscale='Cividis')])
-    fig_3d.add_trace(go.Scatter3d(x=[temp_actuelle], y=[hum_actuelle], z=[o3_mesure_brut], mode='markers', marker=dict(size=8, color='magenta')))
-    fig_3d.update_layout(
-        template="plotly_dark",
-        scene=dict(xaxis_title='Température (°C)', yaxis_title='Humidité (%)', zaxis_title='O3 Brut (ppm)'),
-        margin=dict(l=0, r=0, b=0, t=40), height=500
-    )
-    st.plotly_chart(fig_3d, use_container_width=True)
-
 # =================================================================
-# 4. PAGE 2 : PROTOTYPE & DATASHEET (DISPOSITION EXIGÉE CONSERVÉE)
+# 4. PAGE 2 : PROTOTYPE & DATASHEET (DISPOSITION STRICTE EXIGÉE)
 # =================================================================
 elif page == "🔬 Prototype & Datasheet":
     st.title("🔬 Structure d'Implantation Industrielle & Registres")
@@ -263,19 +233,19 @@ elif page == "🔬 Prototype & Datasheet":
     st.caption(f"Fichier configuré et opéré sous l'autorité de : {FRAMEWORK_EDT}")
     st.divider()
 
-    # Ordre strict : Enseignements, Code, Enseignants, Horaire, Jours, Lieu, Promotion
+    # Maintien absolu de la disposition demandée : Enseignements, Code, Enseignants, Horaire, Jours, Lieu, Promotion
     data_tab = {
         "Enseignements": [
             "Analyse Spectrale et Transformée de Fourier Ultrasons",
             "Couplage Électro-Acoustique de la Décharge (Idp vs f_us)",
             "Discrimination Acoustique du Court-circuit franc",
-            "Algorithme Mathématique de Compensation Thermique O3"
+            "Modélisation de l'Ozone à t=0 (Cinétique de Synthèse Co-dépendante)"
         ],
         "Code": [
             "AC-SPECT-FFT",
             "COUPL-IDP-FUS",
             "DETEC-SILENCE",
-            "COMP-THERM-O3"
+            "O3-INSTANT-T0"
         ],
         "Enseignants": [
             "Équipe Instrumentation",
@@ -287,7 +257,7 @@ elif page == "🔬 Prototype & Datasheet":
             "Cycle API 2ms",
             "Instantané continu",
             "Filtrage 5ms",
-            "Échantillonnage 2s"
+            "Échantillonnage t=0"
         ],
         "Jours": [
             "Permanent",
@@ -299,7 +269,7 @@ elif page == "🔬 Prototype & Datasheet":
             "Processeur DSP Filtre",
             "Unité Centrale CPU",
             "Module d'entrée Analogique",
-            "Calculateur d'Inférence Numérique"
+            "Chambre de décharge / Éclateur"
         ],
         "Promotion": [
             "M2 Instrumentation",
