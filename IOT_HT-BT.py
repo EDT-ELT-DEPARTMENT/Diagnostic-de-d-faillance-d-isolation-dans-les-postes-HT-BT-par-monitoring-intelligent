@@ -94,11 +94,11 @@ if page == "📊 Monitoring Acoustique":
                     st.sidebar.error(f"Erreur de lecture bus : {e}")
         else:
             st.header("💻 Simulateur d'Énergie Acoustique")
-            st.session_state.courant_fuite = st.slider("Courant Globale de Fuite (mA)", 0.0, 15.0, 4.2)
-            st.session_state.idp_crête = st.slider("Amplitude Courant de Décharge Idp (mA)", 0.0, 10.0, 1.5, help="Intensité pure du canal de l'étincelle")
-            st.session_state.freq_ultrasons = st.slider("Fréquence centrale captée (kHz)", 20.0, 180.0, 40.0, help="Fréquence d'écoute du microphone piézoélectrique")
-            st.session_state.temp_reelle = st.slider("Température ambiante (°C)", 10.0, 70.0, 41.5)
-            st.session_state.hum_reelle = st.slider("Humidité ambiante (%)", 5.0, 95.0, 55.0)
+            st.session_state.courant_fuite = st.slider("Courant Globale de Fuite (mA)", 0.0, 15.0, 4.90)
+            st.session_state.idp_crête = st.slider("Amplitude Courant de Décharge Idp (mA)", 0.0, 10.0, 4.88)
+            st.session_state.freq_ultrasons = st.slider("Fréquence centrale captée (kHz)", 20.0, 180.0, 40.0)
+            st.session_state.temp_reelle = st.slider("Température ambiante (°C)", 10.0, 70.0, 18.2)
+            st.session_state.hum_reelle = st.slider("Humidité ambiante (%)", 5.0, 95.0, 28.2)
 
     # --- CALCULS PHYSIQUES DES VALEURS ACOUSTIQUES ---
     idp = st.session_state.idp_crête
@@ -112,27 +112,27 @@ if page == "📊 Monitoring Acoustique":
     # 2. Calcul de l'amplitude acoustique reçue (Formule de couplage mécanique)
     amplitude_acoustique = k_acoust * idp * (f_us / 40.0) * np.exp(-((f_us - f_res_dynamique) / 35.0)**2)
     if idp == 0:
-        amplitude_acoustique = 0.0  # Sécurité court-circuit franc métallique sans bruit de décharge
+        amplitude_acoustique = 0.0  # Sécurité court-circuit franc métallique sans bruit
 
     # 3. Évaluation de la génération d'ozone induite par l'énergie acoustique utile
     f_T = np.exp(-theta_T * (temp_actuelle - 25.0))
     f_H = np.exp(-theta_H * (hum_actuelle - 40.0))
     
-    # L'ozone dépend directement de la puissance acoustique émise (proportionalité de l'ionisation)
-    o3_estime = 0.02 * amplitude_acoustique * f_T * f_H
+    # Intégration de la constante de proportionnalité chimique
+    o3_estime = 0.25 * amplitude_acoustique * f_T * f_H
 
     # Indice de sévérité globale
     indice_final = min(100.0, max(0.0, (amplitude_acoustique * 5) + (st.session_state.courant_fuite * 8)))
 
-    # --- LOGIQUE D'ANALYSE DU FLUX ---
-    if st.session_state.courant_fuite > 5.0 and amplitude_acoustique == 0.0:
+    # --- 🛠️ CORRECTION DU BUG : LOGIQUE D'ANALYSE DUAL (ACOUSTIQUE + O3) ---
+    if st.session_state.courant_fuite > 4.5 and amplitude_acoustique == 0.0:
         statut_alerte = "🚨 COURT-CIRCUIT FRANC GALVANIQUE (Courant élevé, silence acoustique complet : pas d'arcs dans l'air)"
         style_bandeau = "danger_cc"
-    elif amplitude_acoustique > 15.0:
-        statut_alerte = "🔴 DANGER DISRUPTIF MAJEUR (Forte intensité acoustique : amorçage ou cheminement en cours)"
+    elif o3_estime >= 0.25 or amplitude_acoustique > 15.0:
+        statut_alerte = "🔴 ALERTE CRITIQUE DIÉLECTRIQUE & CHIMIQUE (Forte accumulation d'O₃ ou forte intensité acoustique)"
         style_bandeau = "danger"
-    elif 5.0 <= amplitude_acoustique <= 15.0:
-        statut_alerte = "⚠️ VIGILANCE MICRO-ARCS (Activité ultrasonore détectée, début d'altération de l'isolant)"
+    elif (0.05 <= o3_estime < 0.25) or (5.0 <= amplitude_acoustique <= 15.0):
+        statut_alerte = "⚠️ VIGILANCE MICRO-ARCS (Activité ultrasonore modérée ou Effet Corona suspecté)"
         style_bandeau = "warning"
     else:
         statut_alerte = "🟢 ISOLEMENT SAIN (Niveau de bruit de fond normal)"
@@ -153,10 +153,11 @@ if page == "📊 Monitoring Acoustique":
     col_calc[2].metric("🧪 Taux O₃ Estimé", f"{o3_estime:.3f} ppm")
     col_calc[3].metric("🚨 Sévérité Système", f"{indice_final:.1f} %")
 
+    # Affichage du bandeau de sécurité mis à jour
     if style_bandeau == "danger_cc":
         st.error(f"⚡ **CRITIQUE :** {statut_alerte}")
     elif style_bandeau == "danger":
-        st.error(f"🚨 **ALERTE :** {statut_alerte}")
+        st.error(f"🚨 **DANGER DE DEGRADATION :** {statut_alerte}")
     elif style_bandeau == "warning":
         st.warning(f"⚠️ **AVERTISSEMENT :** {statut_alerte}")
     else:
@@ -166,7 +167,6 @@ if page == "📊 Monitoring Acoustique":
 
     # --- GRAPHIC 1: SPECTRE EN FRÉQUENCE DE L'ONDE ACOUSTIQUE ---
     f_axis = np.linspace(20, 180, 200)
-    # Re-calcul de la courbe spectrale pour l'Idp sélectionné
     spectre_vals = k_acoust * idp * (f_axis / 40.0) * np.exp(-((f_axis - f_res_dynamique) / 35.0)**2) if idp > 0 else np.zeros_like(f_axis)
 
     fig_spectre = go.Figure()
@@ -176,7 +176,7 @@ if page == "📊 Monitoring Acoustique":
     fig_spectre.update_layout(
         template="plotly_dark",
         title="Spectre fréquentiel de la Décharge Partielle (Amplitude mécanique = f(Fréquence))",
-        xaxis_title="Fréquence Ultrasons (kHz)",
+        xaxis_title="Fréquence Ultravons (kHz)",
         yaxis_title="Amplitude du signal capteur (µV)"
     )
     st.plotly_chart(fig_spectre, use_container_width=True)
@@ -187,8 +187,7 @@ if page == "📊 Monitoring Acoustique":
     h_space = np.linspace(5, 95, 30)
     T_mesh, H_mesh = np.meshgrid(t_space, h_space)
     
-    # Calcul matriciel de l'O3
-    Z_O3 = 0.02 * amplitude_acoustique * np.exp(-theta_T * (T_mesh - 25.0)) * np.exp(-theta_H * (H_mesh - 40.0))
+    Z_O3 = 0.25 * amplitude_acoustique * np.exp(-theta_T * (T_mesh - 25.0)) * np.exp(-theta_H * (H_mesh - 40.0))
 
     fig_3d = go.Figure(data=[go.Surface(x=t_space, y=h_space, z=Z_O3, colorscale='Cividis')])
     fig_3d.add_trace(go.Scatter3d(x=[temp_actuelle], y=[hum_actuelle], z=[o3_estime], mode='markers', marker=dict(size=8, color='magenta')))
@@ -200,7 +199,7 @@ if page == "📊 Monitoring Acoustique":
     st.plotly_chart(fig_3d, use_container_width=True)
 
 # =================================================================
-# 4. PAGE 2 : PROTOTYPE & DATASHEET (DISPOSITION EXIGÉE CONSERVÉE)
+# 4. PAGE 2 : PROTOTYPE & DATASHEET
 # =================================================================
 elif page == "🔬 Prototype & Datasheet":
     st.title("🔬 Structure d'Implantation Industrielle & Registres")
@@ -208,7 +207,6 @@ elif page == "🔬 Prototype & Datasheet":
     st.caption(f"Fichier configuré et opéré sous l'autorité de : {FRAMEWORK_EDT}")
     st.divider()
 
-    # Disposition stricte respectée à la lettre : Enseignements, Code, Enseignants, Horaire, Jours, Lieu, Promotion
     data_tab = {
         "Enseignements": [
             "Analyse Spectrale et Transformée de Fourier Ultrasons",
