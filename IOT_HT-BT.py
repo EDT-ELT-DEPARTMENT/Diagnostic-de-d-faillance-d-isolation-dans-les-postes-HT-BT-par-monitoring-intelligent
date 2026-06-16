@@ -56,7 +56,7 @@ def initialiser_firebase():
 # 3. PAGE 1 : MONITORING ACOUSTIQUE & ANALYSE À T=0
 # =================================================================
 if page == "📊 Monitoring Acoustique":
-    st.title("🔊 Diagnostic Instantané à t=0 & Cinétique de Décharge")
+    st.title("🔊 Plateforme de monitoring d'un poste HT/BT-Sidi Bel Abbès_Diagnostic Instantané à t=0 & Cinétique de Décharges partielles")
     st.markdown(f"### {ST_TITRE_OFFICIEL}")
     st.caption(f"Système de traitement rattaché au pôle : {FRAMEWORK_EDT}")
 
