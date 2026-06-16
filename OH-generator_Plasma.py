@@ -116,7 +116,7 @@ if page == "📊 Monitoring Acoustique":
     if idp == 0:
         amplitude_acoustique = 0.0
 
-    # FORMULATION : Concentration instantanée générée à t=0 (Sans loi de survie)
+    # FORMULATION : Concentration instantanée générée à t=0
     o3_généré_t0 = 0.5 * amplitude_acoustique * np.exp(-alpha_gen * T) * np.exp(-beta_gen * H)
     
     # Calcul comparatif : Ce qui survit après décomposition thermique (t > 0)
@@ -124,7 +124,7 @@ if page == "📊 Monitoring Acoustique":
 
     indice_final = min(100.0, max(0.0, (amplitude_acoustique * 5) + (st.session_state.courant_fuite * 8)))
 
-    # --- SÉCURITÉ BASÉE SUR L'INTENSITÉ INITIALE GÉNÉRÉE À T=0 ---
+    # --- SÉCURITÉ BASÉE SUR L'INTENSITÉ INITIALE ---
     if st.session_state.courant_fuite > 4.5 and amplitude_acoustique == 0.0:
         statut_alerte = "🚨 COURT-CIRCUIT FRANC GALVANIQUE (Liaison solide, aucun plasma gazeux généré)"
         style_bandeau = "danger_cc"
@@ -135,7 +135,7 @@ if page == "📊 Monitoring Acoustique":
         statut_alerte = "⚠️ VIGILANCE MICRO-ARCS (Génération d'O₃ détectée à la source)"
         style_bandeau = "warning"
     else:
-        statut_alerte = "🟢 ISLEMENT NORMAL (Énergie d'ionisation négligeable)"
+        statut_alerte = "🟢 ISOLEMENT NORMAL (Énergie d'ionisation négligeable)"
         style_bandeau = "normal"
 
     # --- PANNEAU DES MESURES ---
@@ -148,7 +148,7 @@ if page == "📊 Monitoring Acoustique":
 
     st.divider()
 
-    # --- DEUX CADRANS : PRODUCTION À T=0 VS RÉSIDUEL EN CHAMBRE ---
+    # --- DEUX CADRANS ---
     st.markdown("### 🎛️ Analyse Synoptique de la Décharge (Physique des Arcs)")
     
     col_t0, col_tx, col_metrics = st.columns([3.5, 3.5, 3])
@@ -223,7 +223,7 @@ if page == "📊 Monitoring Acoustique":
     st.plotly_chart(fig_spectre, use_container_width=True)
 
 # =================================================================
-# 4. PAGE 2 : PROTOTYPE & DATASHEET (CORRIGÉE POUR SURVEILLANCE INDUSTRIALISÉE)
+# 4. PAGE 2 : PROTOTYPE & DATASHEET (RESTRUCTURATION DES EN-TÊTES)
 # =================================================================
 elif page == "🔬 Prototype & Datasheet":
     st.title("🔬 Structure d'Implantation Industrielle & Registres")
@@ -231,7 +231,7 @@ elif page == "🔬 Prototype & Datasheet":
     st.caption(f"Fichier configuré et opéré sous l'autorité de : {FRAMEWORK_EDT}")
     st.divider()
 
-    # Intégration de la photo du transformateur HT/BT
+    # Chargement de l'image de l'architecture du transformateur HT/BT
     st.image(
         "prototype-2.png", 
         caption="Schéma structurel d'implantation du transformateur cible HT/BT - Point d'analyse d'isolement", 
@@ -239,15 +239,15 @@ elif page == "🔬 Prototype & Datasheet":
     )
     st.divider()
 
-    # Correction radicale : Transformation des entêtes d'EDT en véritables champs de Télémesure d'un poste HT/BT
+    # Remplacement des entêtes EDT obsolètes par la cartographie des télémesures industrielles
     data_tab = {
-        "Fonctions de Diagnostic": [
+        "Grandeurs & Fonctions Diagnostic": [
             "Analyse Spectrale et Transformée de Fourier Ultrasons",
             "Couplage Électro-Acoustique de la Décharge (Idp vs f_us)",
             "Discrimination Acoustique du Court-circuit franc",
             "Modélisation de l'Ozone à t=0 (Cinétique de Synthèse Co-dépendante)"
         ],
-        "Code Registre / ID": [
+        "Code Variable / ID": [
             "AC-SPECT-FFT",
             "COUPL-IDP-FUS",
             "DETEC-SILENCE",
@@ -265,7 +265,7 @@ elif page == "🔬 Prototype & Datasheet":
             "Filtrage 5ms",
             "Échantillonnage t=0"
         ],
-        "Régime de Surveillance": [
+        "Régime d'Acquisition": [
             "Permanent",
             "Permanent",
             "Permanent",
@@ -277,11 +277,11 @@ elif page == "🔬 Prototype & Datasheet":
             "Module d'entrée Analogique",
             "Chambre de décharge / Éclateur"
         ],
-        "Spécification / Classe": [
-            "Supervision M2 Instrumentation",
-            "Supervision M2 Génie Électrique",
-            "Supervision M2 Réseaux Électriques",
-            "Supervision M2 Smart Grids"
+        "Classe de Supervision": [
+            "M2 Instrumentation",
+            "M2 Génie Électrique",
+            "M2 Réseaux Électriques",
+            "M2 Smart Grids"
         ]
     }
     st.table(pd.DataFrame(data_tab))
