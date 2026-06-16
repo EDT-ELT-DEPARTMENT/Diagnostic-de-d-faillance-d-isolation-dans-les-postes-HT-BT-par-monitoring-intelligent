@@ -116,7 +116,7 @@ if page == "📊 Monitoring Acoustique":
     if idp == 0:
         amplitude_acoustique = 0.0
 
-    # 🌟 FORMULATION DEMANDÉE : Concentration instantanée générée à t=0 (Sans loi de survie)
+    # FORMULATION : Concentration instantanée générée à t=0 (Sans loi de survie)
     o3_généré_t0 = 0.5 * amplitude_acoustique * np.exp(-alpha_gen * T) * np.exp(-beta_gen * H)
     
     # Calcul comparatif : Ce qui survit après décomposition thermique (t > 0)
@@ -124,7 +124,7 @@ if page == "📊 Monitoring Acoustique":
 
     indice_final = min(100.0, max(0.0, (amplitude_acoustique * 5) + (st.session_state.courant_fuite * 8)))
 
-    # --- SÉCURITÉ BASÉE ON L'INTENSITÉ INITIALE GÉNÉRÉE À T=0 ---
+    # --- SÉCURITÉ BASÉE SUR L'INTENSITÉ INITIALE GÉNÉRÉE À T=0 ---
     if st.session_state.courant_fuite > 4.5 and amplitude_acoustique == 0.0:
         statut_alerte = "🚨 COURT-CIRCUIT FRANC GALVANIQUE (Liaison solide, aucun plasma gazeux généré)"
         style_bandeau = "danger_cc"
@@ -154,7 +154,6 @@ if page == "📊 Monitoring Acoustique":
     col_t0, col_tx, col_metrics = st.columns([3.5, 3.5, 3])
     
     with col_t0:
-        # Cadran Aiguille de Génération Pure à t=0
         max_scale_t0 = max(5.0, float(np.ceil(o3_généré_t0)))
         fig_t0 = go.Figure(go.Indicator(
             mode="gauge+number",
@@ -176,7 +175,6 @@ if page == "📊 Monitoring Acoustique":
         st.plotly_chart(fig_t0, use_container_width=True)
 
     with col_tx:
-        # Cadran Aiguille du Taux d'O3 persistant (après décomposition)
         max_scale_tx = max(5.0, float(np.ceil(o3_résiduel)))
         fig_tx = go.Figure(go.Indicator(
             mode="gauge+number",
@@ -225,7 +223,7 @@ if page == "📊 Monitoring Acoustique":
     st.plotly_chart(fig_spectre, use_container_width=True)
 
 # =================================================================
-# 4. PAGE 2 : PROTOTYPE & DATASHEET (DISPOSITION STRICTE EXIGÉE)
+# 4. PAGE 2 : PROTOTYPE & DATASHEET (CORRIGÉE POUR SURVEILLANCE INDUSTRIALISÉE)
 # =================================================================
 elif page == "🔬 Prototype & Datasheet":
     st.title("🔬 Structure d'Implantation Industrielle & Registres")
@@ -233,57 +231,57 @@ elif page == "🔬 Prototype & Datasheet":
     st.caption(f"Fichier configuré et opéré sous l'autorité de : {FRAMEWORK_EDT}")
     st.divider()
 
-    # Intégration de la photo du prototype demandée
+    # Intégration de la photo du transformateur HT/BT
     st.image(
         "prototype-2.png", 
-        caption="Vue d'ensemble du prototype expérimental - Analyseur HT/BT", 
+        caption="Schéma structurel d'implantation du transformateur cible HT/BT - Point d'analyse d'isolement", 
         use_container_width=True
     )
     st.divider()
 
-    # Maintien absolu de la disposition demandée : Enseignements, Code, Enseignants, Horaire, Jours, Lieu, Promotion
+    # Correction radicale : Transformation des entêtes d'EDT en véritables champs de Télémesure d'un poste HT/BT
     data_tab = {
-        "Enseignements": [
+        "Fonctions de Diagnostic": [
             "Analyse Spectrale et Transformée de Fourier Ultrasons",
             "Couplage Électro-Acoustique de la Décharge (Idp vs f_us)",
             "Discrimination Acoustique du Court-circuit franc",
             "Modélisation de l'Ozone à t=0 (Cinétique de Synthèse Co-dépendante)"
         ],
-        "Code": [
+        "Code Registre / ID": [
             "AC-SPECT-FFT",
             "COUPL-IDP-FUS",
             "DETEC-SILENCE",
             "O3-INSTANT-T0"
         ],
-        "Enseignants": [
+        "Module Automate / Équipe": [
             "Équipe Instrumentation",
             "Équipe Automatique",
             "Équipe Haute Tension",
             "Équipe Électrotechnique"
         ],
-        "Horaire": [
+        "Cadence de Scrutation": [
             "Cycle API 2ms",
             "Instantané continu",
             "Filtrage 5ms",
             "Échantillonnage t=0"
         ],
-        "Jours": [
+        "Régime de Surveillance": [
             "Permanent",
             "Permanent",
             "Permanent",
             "Permanent"
         ],
-        "Lieu": [
+        "Unité Matérielle / Implantation": [
             "Processeur DSP Filtre",
             "Unité Centrale CPU",
             "Module d'entrée Analogique",
             "Chambre de décharge / Éclateur"
         ],
-        "Promotion": [
-            "M2 Instrumentation",
-            "M2 Génie Électrique",
-            "M2 Réseaux Électriques",
-            "M2 Smart Grids"
+        "Spécification / Classe": [
+            "Supervision M2 Instrumentation",
+            "Supervision M2 Génie Électrique",
+            "Supervision M2 Réseaux Électriques",
+            "Supervision M2 Smart Grids"
         ]
     }
     st.table(pd.DataFrame(data_tab))
@@ -292,4 +290,4 @@ elif page == "🔬 Prototype & Datasheet":
 # 5. PIED DE PAGE INTERACTIF
 # =================================================================
 st.markdown("<hr>", unsafe_allow_html=True)
-st.markdown(f"<center><small>Application : <b>{FRAMEWORK_EDT}</b></small></center>", unsafe_allow_html=True)
+st.markdown(f"<center><small>Application de Monitoring Industriel : <b>{FRAMEWORK_EDT}</b></small></center>", unsafe_allow_html=True)
