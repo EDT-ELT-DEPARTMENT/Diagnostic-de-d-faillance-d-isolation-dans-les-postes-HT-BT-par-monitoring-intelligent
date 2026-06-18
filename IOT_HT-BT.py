@@ -7,6 +7,7 @@ import firebase_admin
 from firebase_admin import credentials, db
 from streamlit_autorefresh import st_autorefresh
 import os
+import serial  # Requiert 'pyserial' (à ajouter dans votre requirements.txt)
 
 # =================================================================
 # 1. CONFIGURATION DE LA PAGE & TITRES OFFICIELS
@@ -20,6 +21,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Rafraîchissement automatique toutes les 2 secondes pour lire le port série
 st_autorefresh(interval=2000, key="acoustrefresh")
 
 if 'if_offset' not in st.session_state:
@@ -31,101 +33,103 @@ st.sidebar.divider()
 page = st.sidebar.radio("Navigation :", ["📊 Monitoring Acoustique", "🔬 Prototype & Datasheet"])
 
 # =================================================================
-# 2. LIAISON COMPOSANT CLOUD (FACULTATIVE)
+# 2. GESTION DE LA LIAISON MATÉRIELLE ARDUINO (PORT SÉRIE)
 # =================================================================
 @st.cache_resource
-def initialiser_firebase():
+def initialiser_liaison_arduino(port, baudrate):
+    """Initialise et maintient la connexion série persistante avec l'Arduino"""
     try:
-        if not firebase_admin._apps:
-            if "firebase" in st.secrets:
-                fb_secrets = dict(st.secrets["firebase"])
-                if "private_key" in fb_secrets:
-                    fb_secrets["private_key"] = fb_secrets["private_key"].replace("\\n", "\n")
-                cred = credentials.Certificate(fb_secrets)
-            else:
-                cred = credentials.Certificate("votre-cle.json")
-                
-            firebase_admin.initialize_app(cred, {
-                'databaseURL': 'https://oh-generator-plasma-sba-default-rtdb.europe-west1.firebasedatabase.app'
-            })
-        return True
+        ser = serial.Serial(port=port, baudrate=baudrate, timeout=1.0)
+        return ser
     except Exception as e:
-        st.sidebar.error(f"Erreur Automate : {e}")
-        return False
+        return f"Erreur de connexion au port {port} : {e}"
 
 # =================================================================
-# 3. PAGE 1 : MONITORING ACOUSTIQUE & ANALYSE À T=0
+# 3. PAGE 1 : MONITORING ACOUSTIQUE & ANALYSE EN TEMPS RÉEL (ARDUINO)
 # =================================================================
 if page == "📊 Monitoring Acoustique":
     st.title("🔊 Plateforme de monitoring d'un poste HT/BT-Sidi Bel Abbès_Diagnostic Instantané à t=0 & Cinétique de Décharges partielles")
     st.markdown(f"### {ST_TITRE_OFFICIEL}")
     st.caption(f"Système de traitement rattaché au pôle : {FRAMEWORK_EDT}")
 
-    if 'temp_reelle' not in st.session_state: st.session_state.temp_reelle = 25.0 
-    if 'hum_reelle' not in st.session_state: st.session_state.hum_reelle = 40.0
-    if 'courant_fuite' not in st.session_state: st.session_state.courant_fuite = 4.90
-    if 'idp_crête' not in st.session_state: st.session_state.idp_crête = 4.88
+    # Initialisation des variables d'état d'acquisition
+    if 'temp_reelle' not in st.session_state: st.session_state.temp_reelle = 22.5 
+    if 'hum_reelle' not in st.session_state: st.session_state.hum_reelle = 35.0
+    if 'courant_fuite' not in st.session_state: st.session_state.courant_fuite = 0.0
+    if 'idp_crête' not in st.session_state: st.session_state.idp_crête = 0.0
     if 'freq_ultrasons' not in st.session_state: st.session_state.freq_ultrasons = 40.0
 
     with st.sidebar:
-        st.header("🎮 Paramètres d'Écoute Acoustique")
-        mode_experimental = st.toggle("🚀 Mode Capteur Physique en Ligne", value=False)
+        st.header("🔌 Connexion Hardware Arduino")
+        mode_hardware = st.toggle("🚀 Activer l'acquisition de la Carte Arduino", value=False)
+        
+        if mode_hardware:
+            port_selectionne = st.text_input("Port COM de la Carte (ex: COM3, COM4, /dev/ttyACM0)", value="COM3")
+            baudrate_selectionne = st.selectbox("Vitesse en Baud (Baudrate)", [9600, 115200], index=0)
+            
+            # Tentative de connexion
+            connexion_ser = initialiser_liaison_arduino(port_selectionne, baudrate_selectionne)
+            
+            if isinstance(connexion_ser, str):
+                st.error(connexion_ser)
+            else:
+                st.success(f"⚡ Liaison série active sur {port_selectionne}")
+                try:
+                    # Vider le tampon pour avoir la trame la plus récente
+                    connexion_ser.reset_input_buffer()
+                    trame = connexion_ser.readline().decode('utf-8', errors='ignore').strip()
+                    
+                    if trame:
+                        valeurs = trame.split(',')
+                        # Attendu : courant_fuite, idp_crete, freq_ultrasons
+                        if len(valeurs) >= 3:
+                            st.session_state.courant_fuite = float(valeurs[0])
+                            st.session_state.idp_crête = float(valeurs[1])
+                            st.session_state.freq_ultrasons = float(valeurs[2])
+                            st.sidebar.caption(f"Dernière trame brute lue : `{trame}`")
+                except Exception as err:
+                    st.sidebar.error(f"Erreur de lecture du flux : {err}")
+                    
         st.divider()
         
         st.subheader("⚙️ Coeffs de Production Initiale (t=0)")
         k_acoust = st.number_input("Gain Capteur ($K_{acoustique}$)", value=2.50, format="%.2f")
         f_max_res = st.number_input("Fréquence Max à vide ($f_{max}$ kHz)", value=140.0, format="%.1f")
         
-        # Coefficients d'impact sur la GÉNÉRATION PURE à t=0
         alpha_gen = st.number_input("Inhibition Thermique Génération ($\\alpha_{gen}$)", value=0.012, format="%.3f")
         beta_gen = st.number_input("Quenching Humidité Génération ($\\beta_{gen}$)", value=0.018, format="%.3f")
-        
-        # Coefficient de DECOMPOSITION (pour info comparative t>0)
         theta_decompo = st.number_input("Taux de Décomposition Thermique (t>0)", value=0.035, format="%.3f")
         st.divider()
         
-        if mode_experimental:
-            if initialiser_firebase():
-                try:
-                    ref = db.reference("/Poste_HT_BT/AcousticSensor")
-                    data_cloud = ref.get()
-                    if data_cloud:
-                        st.session_state.temp_reelle = float(data_cloud.get('temperature', 25.0))
-                        st.session_state.hum_reelle = float(data_cloud.get('humidite', 40.0))
-                        st.session_state.courant_fuite = float(data_cloud.get('courant_fuite_mA', 0.0))
-                        st.session_state.idp_crête = float(data_cloud.get('idp_mA', 0.0))
-                        st.session_state.freq_ultrasons = float(data_cloud.get('freq_kHz', 40.0))
-                except Exception as e:
-                    st.sidebar.error(f"Erreur de lecture bus : {e}")
-        else:
-            st.header("💻 Simulateur d'Énergie Acoustique")
+        if not mode_hardware:
+            st.header("💻 Simulateur (Mode déconnecté)")
             st.session_state.courant_fuite = st.slider("Courant Globale de Fuite (mA)", 0.0, 15.0, 4.90)
             st.session_state.idp_crête = st.slider("Amplitude Courant de Décharge Idp (mA)", 0.0, 10.0, 4.88)
             st.session_state.freq_ultrasons = st.slider("Fréquence centrale captée (kHz)", 20.0, 180.0, 40.0)
-            st.session_state.temp_reelle = st.slider("Température ambiante du Poste (°C)", 10.0, 70.0, 18.2)
-            st.session_state.hum_reelle = st.slider("Humidité ambiante (%)", 5.0, 95.0, 28.2)
+            
+        st.session_state.temp_reelle = st.slider("Température ambiante du Poste (°C)", 10.0, 70.0, 24.5)
+        st.session_state.hum_reelle = st.slider("Humidité ambiante (%)", 5.0, 95.0, 35.0)
 
-    # --- CALCULS PHYSIQUES QUANTITATIFS ---
+    # --- CALCULS PHYSIQUES QUANTITATIFS EXTRACTS DES CAPTEURS ---
     idp = st.session_state.idp_crête
     f_us = st.session_state.freq_ultrasons
     T = st.session_state.temp_reelle
     H = st.session_state.hum_reelle
     
-    # Énergie acoustique équivalente
+    # Énergie acoustique équivalente calculée
     f_res_dynamique = f_max_res - 60.0 * np.tanh(idp / 3.0)
     amplitude_acoustique = k_acoust * idp * (f_us / 40.0) * np.exp(-((f_us - f_res_dynamique) / 35.0)**2)
     if idp == 0:
         amplitude_acoustique = 0.0
 
-    # FORMULATION : Concentration instantanée générée à t=0
+    # Équation cinétique à t=0 pour le taux d'Ozone (O₃) brut
     o3_généré_t0 = 0.5 * amplitude_acoustique * np.exp(-alpha_gen * T) * np.exp(-beta_gen * H)
     
-    # Calcul comparative : Ce qui survit après décomposition thermique (t > 0)
+    # Décomposition résiduelle stabilisée
     o3_résiduel = o3_généré_t0 * np.exp(-theta_decompo * max(0.0, T - 20.0))
-
     indice_final = min(100.0, max(0.0, (amplitude_acoustique * 5) + (st.session_state.courant_fuite * 8)))
 
-    # --- SÉCURITÉ BASÉE SUR L'INTENSITÉ INITIALE ---
+    # --- DIAGNOSTIC AUTOMATE DE SÉCURITÉ ---
     if st.session_state.courant_fuite > 4.5 and amplitude_acoustique == 0.0:
         statut_alerte = "🚨 COURT-CIRCUIT FRANC GALVANIQUE (Liaison solide, aucun plasma gazeux généré)"
         style_bandeau = "danger_cc"
@@ -139,9 +143,9 @@ if page == "📊 Monitoring Acoustique":
         statut_alerte = "🟢 ISOLEMENT NORMAL (Énergie d'ionisation négligeable)"
         style_bandeau = "normal"
 
-    # --- PANNEAU DES MESURES ---
+    # --- AFFICHAGE DE LA GRILLE DES MÉTRIQUES ---
     col_mesures = st.columns(5)
-    col_mesures[0].metric("🔌 I de fuite (Masse)", f"{st.session_state.courant_fuite:.2f} mA")
+    col_mesures[0].metric("🔌 I de fuite (Arduino)", f"{st.session_state.courant_fuite:.2f} mA")
     col_mesures[1].metric("⚡ Idp (Impulsion)", f"{idp:.2f} mA")
     col_mesures[2].metric("🔊 Freq Écoute", f"{f_us:.1f} kHz")
     col_mesures[3].metric("🌡️ Température", f"{T:.1f} °C")
@@ -149,9 +153,8 @@ if page == "📊 Monitoring Acoustique":
 
     st.divider()
 
-    # --- DEUX CADRANS ---
+    # --- CADRANS INDICATEURS D'OZONE ---
     st.markdown("### 🎛️ Analyse Synoptique de la Décharge (Physique des Arcs)")
-    
     col_t0, col_tx, col_metrics = st.columns([3.5, 3.5, 3])
     
     with col_t0:
@@ -160,7 +163,7 @@ if page == "📊 Monitoring Acoustique":
             mode="gauge+number",
             value=o3_généré_t0,
             domain={'x': [0, 1], 'y': [0, 1]},
-            title={'text': "<b>O₃ Instantané Généré (t=0)</b><br><span style='font-size:0.8em;color:#00ffcc'>Concentration brute à la source</span>", 'font': {'size': 14, 'color': '#00ffcc'}},
+            title={'text': "<b>O₃ Instantané Généré (t=0)</b><br><span style='font-size:0.8em;color:#00ffcc'>Concentration brute à la source (ppm)</span>", 'font': {'size': 14, 'color': '#00ffcc'}},
             gauge={
                 'axis': {'range': [0, max_scale_t0], 'tickcolor': "white"},
                 'bar': {'color': "#00ffcc"},
@@ -181,7 +184,7 @@ if page == "📊 Monitoring Acoustique":
             mode="gauge+number",
             value=o3_résiduel,
             domain={'x': [0, 1], 'y': [0, 1]},
-            title={'text': "<b>O₃ Résiduel Stable (t>0)</b><br><span style='font-size:0.8em;color:#ffaa00'>Valeur résiduelle dans la cellule</span>", 'font': {'size': 14, 'color': '#ffaa00'}},
+            title={'text': "<b>O₃ Résiduel Stable (t>0)</b><br><span style='font-size:0.8em;color:#ffaa00'>Valeur résiduelle stabilisée</span>", 'font': {'size': 14, 'color': '#ffaa00'}},
             gauge={
                 'axis': {'range': [0, max_scale_tx], 'tickcolor': "white"},
                 'bar': {'color': "#ffaa00"},
@@ -202,18 +205,14 @@ if page == "📊 Monitoring Acoustique":
         st.metric("🎯 Résonance Plasma", f"{f_res_dynamique:.1f} kHz")
         st.metric("🚨 Taux de Sévérité", f"{indice_final:.1f} %")
         
-        if style_bandeau == "danger_cc":
-            st.error(f"⚡ {statut_alerte}")
-        elif style_bandeau == "danger":
-            st.error(f"🚨 {statut_alerte}")
-        elif style_bandeau == "warning":
-            st.warning(f"⚠️ {statut_alerte}")
-        else:
-            st.success(f"✅ {statut_alerte}")
+        if style_bandeau == "danger_cc": st.error(f"⚡ {statut_alerte}")
+        elif style_bandeau == "danger": st.error(f"🚨 {statut_alerte}")
+        elif style_bandeau == "warning": st.warning(f"⚠️ {statut_alerte}")
+        else: st.success(f"✅ {statut_alerte}")
 
     st.divider()
 
-    # --- SPECTRE ACOUSTIQUE ---
+    # --- SPECTRE FRÉQUENTIEL GRAPHISME ---
     f_axis = np.linspace(20, 180, 200)
     spectre_vals = k_acoust * idp * (f_axis / 40.0) * np.exp(-((f_axis - f_res_dynamique) / 35.0)**2) if idp > 0 else np.zeros_like(f_axis)
 
@@ -224,7 +223,7 @@ if page == "📊 Monitoring Acoustique":
     st.plotly_chart(fig_spectre, use_container_width=True)
 
 # =================================================================
-# 4. PAGE 2 : PROTOTYPE & DATASHEET (RÉSOLU VIA CHEMIN ABSOLU RELATIF)
+# 4. PAGE 2 : PROTOTYPE & DATASHEET (COMPLET ET SYNC GITHUB)
 # =================================================================
 elif page == "🔬 Prototype & Datasheet":
     st.title("🔬 Structure d'Implantation Industrielle & Registres")
@@ -232,7 +231,7 @@ elif page == "🔬 Prototype & Datasheet":
     st.caption(f"Fichier configuré et opéré sous l'autorité de : {FRAMEWORK_EDT}")
     st.divider()
 
-    # --- RÉSOLUTION DU CHEMIN ABSOLU REQUIS POUR GITHUB/STREAMLIT CLOUD ---
+    # Résolution sécurisée du répertoire pour l'affichage de l'image
     repertoire_du_script = os.path.dirname(os.path.abspath(__file__))
     chemin_absolu_image = os.path.join(repertoire_du_script, "prototype-2.png")
 
@@ -244,11 +243,10 @@ elif page == "🔬 Prototype & Datasheet":
         )
     else:
         st.error(f"⚠️ Image introuvable au chemin détecté : {chemin_absolu_image}")
-        st.info("Vérifiez que le fichier possède exactement cette casse d'écriture sur votre dépôt.")
 
     st.divider()
 
-    # Table de cartographie industrielle
+    # Table de cartographie industrielle nettoyée (Rappel disposition EDT d'origine)
     data_tab = {
         "Grandeurs & Fonctions Diagnostic": [
             "Analyse Spectrale et Transformée de Fourier Ultrasons",
